@@ -42,6 +42,7 @@ const VoiceStateStore = findByPropsLazy("getVoiceStatesForChannel", "getCurrentC
 
 async function speak(text: string, settings: any = vcNarrator.settings.store) {
     if (text.trim().length === 0) return;
+    console.log(text, settings);
     const response = await fetch("https://tiktok-tts.weilnet.workers.dev/api/generation", {
         method: "POST",
         mode: "cors",
@@ -170,7 +171,7 @@ function playSample(tempSettings: any, type: string) {
 
 const vcNarrator = definePlugin({
     name: "VcNarrator Custom",
-    description: "Announces when users join, leave, or move voice channels via narrator. Altered version because speechSynthesis is boring lol",
+    description: "Announces when users join, leave, or move voice channels via narrator. TikTok TTS version; speechSynthesis is pretty boring",
     authors: [Devs.Ven, Devs.Nyako],
 
     flux: {
@@ -184,8 +185,11 @@ const vcNarrator = definePlugin({
             for (const state of voiceStates) {
                 const { userId, channelId, oldChannelId } = state;
                 const isMe = userId === myId;
-                if (isMe || !myChanId) continue;
-                if (channelId !== myChanId && oldChannelId !== myChanId) continue;
+                if (isMe && vcNarrator.settings.store.ignoreSelf) continue;
+                if (!isMe) {
+                    if (!myChanId) continue;
+                    if (channelId !== myChanId && oldChannelId !== myChanId) continue;
+                }
 
                 const [type, id] = getTypeAndChannelId(state, isMe);
                 if (!type) continue;
@@ -244,6 +248,11 @@ const vcNarrator = definePlugin({
         },
         sayOwnName: {
             description: "Say own name",
+            type: OptionType.BOOLEAN,
+            default: false
+        },
+        ignoreSelf: {
+            description: "Ignore yourself for all events.",
             type: OptionType.BOOLEAN,
             default: false
         },
