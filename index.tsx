@@ -42,7 +42,6 @@ const VoiceStateStore = findByPropsLazy("getVoiceStatesForChannel", "getCurrentC
 
 async function speak(text: string, settings: any = vcNarrator.settings.store) {
     if (text.trim().length === 0) return;
-    console.log(text, settings);
     const response = await fetch("https://tiktok-tts.weilnet.workers.dev/api/generation", {
         method: "POST",
         mode: "cors",
