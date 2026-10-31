@@ -389,7 +389,9 @@ const vcNarrator = definePlugin({
                     variant="primary"
                     confirmText="Ok"
                     onConfirm={addToCSP}
-                />
+                >
+                    <Paragraph>The VcNarrator Custom Server URL must be whitelisted in order for the plugin to work.</Paragraph>
+                </ConfirmModal>
             ));
         }
     }
