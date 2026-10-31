@@ -71,7 +71,7 @@ async function addToCSP() {
     }
 }
 
-async function isOnCSP() {
+async function isCspAllowed() {
     if (IS_WEB) return true;
 
     return await VencordNative.csp.isDomainAllowed(SERVER_URL, ["connect-src"]);
@@ -380,8 +380,8 @@ const vcNarrator = definePlugin({
     },
 
     async start() {
-        const is_already_on_csp = await isOnCSP();
-        if (!is_already_on_csp) {
+        const is_allowed = await isCspAllowed();
+        if (!is_allowed) {
             openModal(modalProps => (
                 <ConfirmModal
                     {...modalProps}
