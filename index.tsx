@@ -39,7 +39,7 @@ interface VoiceState {
 }
 
 const VoiceStateStore = findByPropsLazy("getVoiceStatesForChannel", "getCurrentClientVoiceChannelId");
-const SERVER_URL = "https://tiktok-tts.weilnet.workers.dev";
+const SERVER_URL = "https://ottsy.weilbyte.dev";
 const ENDPOINT = `${SERVER_URL}/api/generation`;
 
 function showError(body: string) {
