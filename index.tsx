@@ -17,12 +17,16 @@
 */
 
 import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
+import { Heading } from "@components/Heading";
+import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { Margins } from "@utils/margins";
+import { promptToRestart } from "@utils/promptToRestart";
 import { wordsToTitle } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
 import { findByPropsLazy } from "@webpack";
-import { Button, ChannelStore, Forms, GuildMemberStore, SelectedChannelStore, SelectedGuildStore, useMemo, UserStore } from "@webpack/common";
+import { Alerts, ChannelStore, ConfirmModal, GuildMemberStore, openModal, SelectedChannelStore, SelectedGuildStore, useMemo, UserStore } from "@webpack/common";
 
 interface VoiceState {
     userId: string;
@@ -35,6 +39,43 @@ interface VoiceState {
 }
 
 const VoiceStateStore = findByPropsLazy("getVoiceStatesForChannel", "getCurrentClientVoiceChannelId");
+const SERVER_URL = "https://tiktok-tts.weilnet.workers.dev";
+const ENDPOINT = `${SERVER_URL}/api/generation`;
+
+function showError(body: string) {
+    Alerts.show({
+        title: "VcNarrator Custom",
+        body,
+    });
+}
+
+async function addToCSP() {
+    const res = await VencordNative.csp.requestAddOverride(SERVER_URL, ["connect-src"], "VcNarrator Custom");
+    switch (res) {
+        case "cancelled":
+        case "unchecked":
+            showError("CSP override request wasn't approved.");
+            return;
+        case "conflict":
+            showError("CSP override conflict. Another plugin may have already requested an override for this domain.");
+            return;
+        case "invalid":
+            showError("Invalid domain.");
+            return;
+        case "ok":
+            promptToRestart("relaunch", {
+                title: "VcNarrator Custom",
+                subtitle: "The VcNarrator Custom Server URL was successfully whitelisted. Please restart the app for the changes to take effect.",
+            });
+            return;
+    }
+}
+
+async function isOnCSP() {
+    if (IS_WEB) return true;
+
+    return await VencordNative.csp.isDomainAllowed(SERVER_URL, ["connect-src"]);
+}
 
 // Mute/Deaf for other people than you is commented out, because otherwise someone can spam it and it will be annoying
 // Filtering out events is not as simple as just dropping duplicates, as otherwise mute, unmute, mute would
@@ -42,7 +83,7 @@ const VoiceStateStore = findByPropsLazy("getVoiceStatesForChannel", "getCurrentC
 
 async function speak(text: string, settings: any = vcNarrator.settings.store) {
     if (text.trim().length === 0) return;
-    const response = await fetch("https://tiktok-tts.weilnet.workers.dev/api/generation", {
+    const response = await fetch(ENDPOINT, {
         method: "POST",
         mode: "cors",
         cache: "no-cache",
@@ -160,12 +201,12 @@ function updateStatuses(type: string, { deaf, mute, selfDeaf, selfMute, userId, 
 }
 */
 
-function playSample(tempSettings: any, type: string) {
-    const settings = Object.assign({}, vcNarrator.settings.store, tempSettings);
+function playSample(type: string) {
+    const settings = vcNarrator.settings.store;
     const currentUser = UserStore.getCurrentUser();
     const myGuildId = SelectedGuildStore.getGuildId();
 
-    speak(formatText(settings[type + "Message"], currentUser.username, "general", (currentUser as any).globalName ?? currentUser.username, GuildMemberStore.getNick(myGuildId, currentUser.id) ?? currentUser.username), settings);
+    speak(formatText(settings[type + "Message"], currentUser.username, "general", (currentUser as any).globalName ?? currentUser.username, GuildMemberStore.getNick(myGuildId ?? "", currentUser.id) ?? currentUser.username), settings);
 }
 
 const vcNarrator = definePlugin({
@@ -196,7 +237,7 @@ const vcNarrator = definePlugin({
                 const template = vcNarrator.settings.store[type + "Message"];
                 const user = isMe && !vcNarrator.settings.store.sayOwnName ? "" : UserStore.getUser(userId).username;
                 const displayName = user && ((UserStore.getUser(userId) as any).globalName ?? user);
-                const nickname = user && (GuildMemberStore.getNick(myGuildId, userId) ?? displayName);
+                const nickname = user && (GuildMemberStore.getNick(myGuildId ?? "", userId) ?? displayName);
                 const channel = ChannelStore.getChannel(id).name;
 
                 speak(formatText(template, user, channel, displayName, nickname));
@@ -297,7 +338,7 @@ const vcNarrator = definePlugin({
         }
     }),
 
-    settingsAboutComponent({ tempSettings: s }) {
+    settingsAboutComponent() {
 
         const types = useMemo(
             () => Object.keys(vcNarrator.settings.store).filter(k => k.endsWith("Message")).map(k => k.slice(0, -7)),
@@ -307,18 +348,18 @@ const vcNarrator = definePlugin({
         const errorComponent: React.ReactElement | null = null;
 
         return (
-            <Forms.FormSection>
-                <Forms.FormText>
-                    You can customise the spoken messages below. You can disable specific messages by setting them to nothing
-                </Forms.FormText>
-                <Forms.FormText>
+            <div>
+                <Paragraph>
+                    You can customize the spoken messages below. You can disable specific messages by setting them to nothing
+                </Paragraph>
+                <Paragraph>
                     The special placeholders <code>{"{{USER}}"}</code>, <code>{"{{DISPLAY_NAME}}"}</code>, <code>{"{{NICKNAME}}"}</code> and <code>{"{{CHANNEL}}"}</code>{" "}
                     will be replaced with the user's name (nothing if it's yourself), the user's display name, the user's nickname on current server and the channel's name respectively
-                </Forms.FormText>
-                <Forms.FormText>
+                </Paragraph>
+                <Paragraph>
                     You can find a list of custom voices (tiktok only for now) <a href="https://github.com/oscie57/tiktok-voice/wiki/Voice-Codes" target="_blank" rel="noreferrer">here</a>
-                </Forms.FormText>
-                <Forms.FormTitle className={Margins.top20} tag="h3">Play Example Sounds</Forms.FormTitle>
+                </Paragraph>
+                <Heading className={Margins.top20} tag="h3">Play Example Sounds</Heading>
                 <div
                     style={{
                         display: "grid",
@@ -328,14 +369,29 @@ const vcNarrator = definePlugin({
                     className={"vc-narrator-buttons"}
                 >
                     {types.map(t => (
-                        <Button key={t} onClick={() => playSample(s, t)}>
+                        <Button key={t} onClick={() => playSample(t)}>
                             {wordsToTitle([t])}
                         </Button>
                     ))}
                 </div>
                 {errorComponent}
-            </Forms.FormSection>
+            </div>
         );
+    },
+
+    async start() {
+        const is_already_on_csp = await isOnCSP();
+        if (!is_already_on_csp) {
+            openModal(modalProps => (
+                <ConfirmModal
+                    {...modalProps}
+                    title="VcNarrator Custom"
+                    variant="primary"
+                    confirmText="Ok"
+                    onConfirm={addToCSP}
+                />
+            ));
+        }
     }
 });
 
